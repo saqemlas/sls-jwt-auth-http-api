@@ -18,7 +18,7 @@ For more information...
 - [AWS Documentation: Http vs Rest](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-vs-rest.html)
 - [AWS Documentation: Http Api Jwt Authorizer ](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-jwt-authorizer.html)
 - [AWS Documentation: Custom Scopes in Amazon Cognito for Api Gateway](https://aws.amazon.com/premiumsupport/knowledge-center/cognito-custom-scopes-api-gateway/)
-- []()
+- [AWS Documentation: Defining Resource Servers for User Pools](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-define-resource-servers.html)
 
 
 ## Architecture
