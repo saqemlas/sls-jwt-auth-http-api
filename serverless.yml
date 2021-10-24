@@ -1,0 +1,175 @@
+service: jwt-auth
+
+
+variablesResolutionMode: 20210326
+
+
+plugins:
+  - serverless-esbuild
+  - serverless-s3-cleaner
+  - serverless-iam-roles-per-function
+
+
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!.serverless/**'
+
+
+custom:
+  baseName: ${self:service}-${self:provider.stage}
+
+  oauth:
+    resourceServerId: example
+    crudScope: read
+
+  esbuild:
+    target: node14
+    packager: yarn
+    minify: true
+    sourcemap: true
+    concurrency: 10
+  
+  serverless-s3-cleaner:
+    buckets:
+      - ${cf:${self:custom.baseName}.ServerlessDeploymentBucketName, ''}
+
+  serverless-iam-roles-per-function:
+    defaultInherit: true
+
+
+provider:
+  name: aws
+  region: ${opt:region, 'eu-west-1'}
+  stage: ${opt:stage, 'dev'}
+  stackName: ${self:custom.baseName}
+  deploymentBucket:
+    blockPublicAccess: true
+  runtime: nodejs14.x
+  memorySize: 128
+  timeout: 25
+  versionFunctions: false
+  logRetentionInDays: 7
+  logs:
+    httpApi: true
+  environment:
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+    NODE_OPTIONS: "--enable-source-maps"
+  httpApi:
+    disableDefaultEndpoint: false
+    shouldStartNameWithService: true
+    cors:
+      allowedOrigins:
+        - '*'
+      allowedMethods:
+        - GET
+      allowedHeaders:
+        - Authorization
+        - Content-Type
+    authorizers:
+      getJwtAuthorizer:
+        type: jwt
+        identitySource: $request.header.Authorization
+        issuerUrl: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+        audience:
+          - !Ref UserPoolClient
+  iam:
+    role:
+      name: ${self:custom.baseName}-role
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:log-stream:*
+
+
+functions:
+  query:
+    name: ${self:custom.baseName}-query
+    handler: src/query/index.handler
+    events:
+      - httpApi:
+          path: /query/{id}
+          method: GET
+          authorizer:
+            name: getJwtAuthorizer
+            scopes:
+              - ${self:custom.oauth.resourceServerId}/${self:custom.oauth.crudScope}
+  catch:
+    name: ${self:custom.baseName}-catch
+    handler: src/catch/index.handler
+    events:
+      - httpApi: '*'
+
+resources:
+  Resources:
+
+    # Cognito
+
+    UserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: ${self:custom.baseName}-userpool
+ 
+    UserPoolResourceServer:
+      Type: AWS::Cognito::UserPoolResourceServer
+      Properties:
+        Name: Example
+        UserPoolId: !Ref UserPool
+        Identifier: ${self:custom.oauth.resourceServerId}
+        Scopes:
+          - ScopeName: ${self:custom.oauth.crudScope}
+            ScopeDescription: Read
+
+    UserPoolClient:
+      DependsOn: UserPoolResourceServer
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: UserPoolClient
+        UserPoolId: !Ref UserPool
+        GenerateSecret: true
+        AllowedOAuthFlowsUserPoolClient: true
+        AllowedOAuthFlows:
+          - client_credentials
+        AllowedOAuthScopes:
+          - ${self:custom.oauth.resourceServerId}/${self:custom.oauth.readScope}
+
+    UserPoolDomain:
+      Type: AWS::Cognito::UserPoolDomain
+      Properties:
+        UserPoolId: !Ref UserPool
+        Domain: ${self:custom.baseName}-auth-domain
+    
+
+    # SSM
+
+    CognitoUserPoolIdParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /${self:service}/${self:provider.stage}/cognitoUserPoolId
+        Type: String
+        Value: !Ref UserPool
+  
+    CognitoUserPoolDomainEndpointParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /${self:service}/${self:provider.stage}/cognitoUserPoolDomainEndpoint
+        Type: String
+        Value: !Sub https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com
+    
+    CognitoUserPoolClientIdParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /${self:service}/${self:provider.stage}/cognitoUserPoolClientId
+        Type: String
+        Value: !Ref UserPoolClient
+  
+    ApiEndpointParam:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /${self:service}/${self:provider.stage}/apiEndpoint
+        Type: String
+        Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
