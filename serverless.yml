@@ -1,4 +1,4 @@
-service: jwt-auth
+service: jwtauth
 
 
 variablesResolutionMode: 20210326
@@ -18,7 +18,8 @@ package:
 
 
 custom:
-  baseName: ${self:service}-${self:provider.stage}
+  project: template
+  baseName: ${self:custom.project}-${self:service}-${self:provider.stage}
 
   oauth:
     resourceServerId: example
@@ -29,7 +30,6 @@ custom:
     packager: yarn
     minify: true
     sourcemap: true
-    concurrency: 10
   
   serverless-s3-cleaner:
     buckets:

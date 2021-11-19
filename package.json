@@ -1,5 +1,5 @@
 {
-  "name": "@aws-template/aws-api-custom-domain",
+  "name": "@aws-template/aws-jwt-auth-http-api",
   "version": "1.0.0",
   "license": "UNLICENSED",
   "scripts": {
